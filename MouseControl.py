@@ -2,7 +2,9 @@ import cv2
 import time
 import numpy as np
 import pyautogui
+import ctypes
 
+from GestureRecognizer import GestureRecognizer
 import HandTrackingModule as htm
 import GestureUtils as gu
 
@@ -12,8 +14,15 @@ import GestureUtils as gu
 # =======================
 
 screenWidth, screenHeight = pyautogui.size()
+def moveMouse(x, y):
+    ctypes.windll.user32.SetCursorPos(
+        int(x),
+        int(y)
+    )
 
 pyautogui.FAILSAFE = False
+
+pyautogui.PAUSE = 0
 
 
 # =======================
@@ -22,8 +31,12 @@ pyautogui.FAILSAFE = False
 
 cap = cv2.VideoCapture(0)
 
-cap.set(3, 1920)
-cap.set(4, 1080)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+
+cameraWidth = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+
+cameraHeight = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
 detector = htm.HandDetector(
     mode=False,
@@ -32,6 +45,7 @@ detector = htm.HandDetector(
     trackCon=0.9
 )
 
+gesture = GestureRecognizer(detector)
 
 # =======================
 # Settings
@@ -46,6 +60,11 @@ mouseY = 0
 
 currentX = 0
 currentY = 0
+
+lastMouseX = 0
+lastMouseY = 0
+
+MOUSE_DEADZONE = 2
 
 pTime = 0
 
@@ -67,15 +86,39 @@ while True:
 
     lmList = detector.findPosition(img)
 
-    if len(lmList) != 0:
+    gesture.update()
 
-        fingers = detector.fingersUp()
+    state = gesture.getState()
+
+
+
+    if state is None:
+        continue
+
+    print(state["rotation"])
+
+    pointer = state["pointer"]
+
+    cv2.circle(
+        img,
+        (pointer["x"], pointer["y"]),
+        8,
+        (0, 255, 255),
+        cv2.FILLED
+    )
+
+
+
+
+    if gesture.isTracking():
 
         # Chỉ khi giơ ngón trỏ
-        if fingers == [0,1,0,0,0]:
+        if state["fingers"]["index"]:
 
-            x = lmList[8][1]
-            y = lmList[8][2]
+            pointer = state["pointer"]
+
+            x = pointer["x"]
+            y = pointer["y"]
 
             # Hiển thị đầu ngón trỏ
             cv2.circle(
@@ -89,13 +132,15 @@ while True:
             # Mapping Camera -> Screen
             targetX = np.interp(
                 x,
-                (FRAME_REDUCTION, 1920 - FRAME_REDUCTION),
+                (FRAME_REDUCTION,
+                 cameraWidth - FRAME_REDUCTION),
                 (0, screenWidth)
             )
 
             targetY = np.interp(
                 y,
-                (FRAME_REDUCTION, 1080 - FRAME_REDUCTION),
+                (FRAME_REDUCTION,
+                 cameraHeight - FRAME_REDUCTION),
                 (0, screenHeight)
             )
 
@@ -112,17 +157,29 @@ while True:
                 SMOOTHING
             )
 
-            pyautogui.moveTo(
-                currentX,
-                currentY
-            )
+            if (
+                    abs(currentX - lastMouseX) > MOUSE_DEADZONE or
+                    abs(currentY - lastMouseY) > MOUSE_DEADZONE
+            ):
+                moveMouse(
+                    currentX,
+                    currentY
+                )
+
+                lastMouseX = currentX
+                lastMouseY = currentY
+
+
 
     # ===== Camera Frame =====
 
     cv2.rectangle(
         img,
         (FRAME_REDUCTION, FRAME_REDUCTION),
-        (1920-FRAME_REDUCTION,1080-FRAME_REDUCTION),
+        (
+            int(cameraWidth - FRAME_REDUCTION),
+            int(cameraHeight - FRAME_REDUCTION)
+        ),
         (255,255,255),
         2
     )
