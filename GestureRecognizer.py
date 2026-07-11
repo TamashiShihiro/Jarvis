@@ -15,6 +15,17 @@ class GestureRecognizer:
 
         self.detector = detector
 
+        self.dragging = False
+        self.leftClicked = False
+        self.rightClicked = False
+
+    def isPinching(self):
+
+        if len(self.lmList) == 0:
+            return False
+
+        return self.pinchDistance() < self.handScale() * 0.32
+
     def update(self):
 
         self.lmList = self.detector.lmList
@@ -117,27 +128,35 @@ class GestureRecognizer:
 
         mcp, pip, tip = self.fingerMap[finger]
 
-        score = 0
-
-        # 1. Góc
         angle = self._angle(mcp, pip, tip)
 
-        if angle > 155:
-            score += 1
+        if angle > 160:
+            return True
 
-        # 2. Tip cao hơn PIP
-        if self._isAbove(tip, pip):
-            score += 1
+        return False
 
-        # 3. Tip cao hơn MCP
-        if self._isAbove(tip, mcp):
-            score += 1
+    def isThumbExtended(self):
 
-        # 4. Độ dài đốt cuối
-        if self._distance(pip, tip) > self.handScale() * 0.18:
-            score += 1
+        if len(self.lmList) == 0:
+            return False
 
-        return score >= 3
+        wrist = self.lmList[0]
+        mcp = self.lmList[2]
+        tip = self.lmList[4]
+
+        dTip = math.hypot(
+            tip[1] - wrist[1],
+            tip[2] - wrist[2]
+        )
+
+        dMcp = math.hypot(
+            mcp[1] - wrist[1],
+            mcp[2] - wrist[2]
+        )
+
+        return dTip > dMcp * 1.2
+
+
 
     def _isAbove(self, p1, p2):
 
@@ -206,6 +225,7 @@ class GestureRecognizer:
             },
 
             "fingers": {
+                "thumb": self.isThumbExtended(),
                 "index": self.isFingerExtended("index"),
                 "middle": self.isFingerExtended("middle"),
                 "ring": self.isFingerExtended("ring"),

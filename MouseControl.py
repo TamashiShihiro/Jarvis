@@ -24,6 +24,18 @@ pyautogui.FAILSAFE = False
 
 pyautogui.PAUSE = 0
 
+leftClicked = False
+rightClicked = False
+
+dragging = False
+
+PINCH_THRESHOLD_RATIO = 0.35
+DRAG_DELAY = 0.20
+pinchStartTime = None
+
+lastClickTime = 0
+
+DOUBLE_CLICK_TIME = 0.30
 
 # =======================
 # Camera
@@ -112,8 +124,32 @@ while True:
 
     if gesture.isTracking():
 
+        thumb = state["fingers"]["thumb"]
+        index = state["fingers"]["index"]
+        middle = state["fingers"]["middle"]
+        ring = state["fingers"]["ring"]
+        pinky = state["fingers"]["pinky"]
+
+        pinch = state["pinch"]["distance"]
+
         # Chỉ khi giơ ngón trỏ
-        if state["fingers"]["index"]:
+        moveMode = (
+                thumb and
+                index and
+                not middle and
+                not ring and
+                not pinky
+        )
+
+        rightMoveMode = (
+                thumb and
+                index and
+                middle and
+                not ring and
+                not pinky
+        )
+
+        if moveMode or rightMoveMode:
 
             pointer = state["pointer"]
 
@@ -165,6 +201,83 @@ while True:
                     currentX,
                     currentY
                 )
+
+                PINCH_THRESHOLD = state["scale"] * PINCH_THRESHOLD_RATIO
+
+                # =========================
+                # LEFT CLICK / DRAG
+                # =========================
+
+                if moveMode:
+
+                    if pinch < PINCH_THRESHOLD:
+
+                        if pinchStartTime is None:
+                            pinchStartTime = time.time()
+
+                        # Giữ pinch -> Drag
+                        if (
+                                time.time() - pinchStartTime > DRAG_DELAY
+                                and
+                                not dragging
+                        ):
+                            pyautogui.mouseDown()
+                            dragging = True
+
+                    else:
+
+                        if dragging:
+                            pyautogui.mouseUp()
+                            dragging = False
+
+
+                        elif pinchStartTime is not None:
+
+                            now = time.time()
+
+                            if now - lastClickTime < DOUBLE_CLICK_TIME:
+
+                                pyautogui.doubleClick()
+
+                                lastClickTime = 0
+
+                            else:
+
+                                pyautogui.click()
+
+                                lastClickTime = now
+
+                        pinchStartTime = None
+
+
+                # =========================
+                # RIGHT CLICK
+                # =========================
+
+                elif rightMoveMode:
+
+                    pinchStartTime = None
+
+                    if pinch < PINCH_THRESHOLD:
+
+                        if not rightClicked:
+                            pyautogui.rightClick()
+                            rightClicked = True
+
+                    else:
+                        rightClicked = False
+
+                else:
+
+                    pinchStartTime = None
+
+                    if dragging:
+                        pyautogui.mouseUp()
+                        dragging = False
+
+                    rightClicked = False
+
+
 
                 lastMouseX = currentX
                 lastMouseY = currentY
